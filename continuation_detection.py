@@ -136,7 +136,16 @@ def detect_continuation_question(
     response, _ = groq_response_func(messages)
 
     try:
-        result = json.loads(response)
+        # Strip markdown backticks if present
+        cleaned_response = response.strip()
+        if cleaned_response.startswith("```json"):
+            cleaned_response = cleaned_response[7:]
+        elif cleaned_response.startswith("```"):
+            cleaned_response = cleaned_response[3:]
+        if cleaned_response.endswith("```"):
+            cleaned_response = cleaned_response[:-3]
+
+        result = json.loads(cleaned_response.strip())
 
         if result.get('is_continuation') and result.get('confidence') in ['high', 'medium']:
             return True, result.get('combined_question'), result.get('reasoning')

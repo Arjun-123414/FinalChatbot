@@ -29,51 +29,48 @@ def extract_table_from_query(sql_query: str) -> List[str]:
 
 def combine_questions_with_llm(current_question: str, previous_question: str, groq_response_func) -> str:
     """
-    Use LLM to combine current and previous questions into a meaningful single question.
+    Use LLM to enhance current question using previous context,
+    but DO NOT merge the two questions.
     """
     combination_prompt = f"""
-    You need to enhance the current question using context from the previous question to make it complete and meaningful.
+    Your task is to rewrite the CURRENT question so that it is
+    self-contained by inheriting only the necessary CONTEXT
+    (like vendor id, year, filters) from the PREVIOUS question.
+
+    ⚠️ VERY IMPORTANT RULES:
+    - DO NOT repeat or include the actual intent of the previous question.
+    - Only add missing details (vendor, year, department, etc.) from the previous question.
+    - Focus ONLY on the CURRENT question intent.
+    - The output must be a single, natural, complete question.
 
     Previous Question: {previous_question}
     Current Question: {current_question}
 
-    The current question is a follow-up that lacks context. Use information from the previous question to make the current question self-contained and meaningful.
 
-    IMPORTANT: 
-    - DO NOT try to answer both questions
-    - Focus on answering the CURRENT question only
-    - Use context from previous question to fill in missing details in current question
-    - Make the current question complete so it doesn't need additional context
 
-    Examples:
-    - Previous: "no of pos created"
-    - Current: "in the last year"
-    - Combined: "What is the number of POs created in the last year?"
+    Example 1:
+    - Previous: "Show me sales data for Q1 2023"
+    - Current: "Which month had highest sales"
+    - Enhanced: "Which month had highest sales in Q1 2023?"
 
-    - Previous: "show me sales data for Q1 2023"
-    - Current: "which month had highest sales"
-    - Enhanced: "Which month in Q1 2023 had the highest sales?"
-
-    - Previous: "what are the employees in marketing department"
-    - Current: "who has the highest salary"
+    Example 2:
+    - Previous: "What are the employees in the marketing department"
+    - Current: "Who has the highest salary"
     - Enhanced: "Who has the highest salary in the marketing department?"
 
-    Respond with only the enhanced question, nothing else.
+    Respond ONLY with the rewritten current question.
     """
 
     messages = [
-        {"role": "system", "content": "You are an expert at combining related questions into coherent, meaningful queries."},
+        {"role": "system", "content": "You are an expert at rewriting questions with inherited context."},
         {"role": "user", "content": combination_prompt}
     ]
 
     try:
         response, _ = groq_response_func(messages)
-        # Clean the response and return
-        combined_question = response.strip().strip('"').strip("'")
-        return combined_question
-    except Exception as e:
-        # Fallback to simple combination if LLM fails
-        return f"{current_question} (from the context of: {previous_question})"
+        return response.strip().strip('"').strip("'")
+    except Exception:
+        return f"{current_question} (in context of: {previous_question})"
 
 
 def detect_continuation_question(

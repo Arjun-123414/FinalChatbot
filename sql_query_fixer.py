@@ -180,6 +180,61 @@ def fix_null_in_grouped_columns(query: str) -> str:
     return fixed_query
 
 
+def fix_special_column_quotes(query: str) -> str:
+    """
+    Add quotes to special columns item_# and discount_% in PO_DETAILS table if not already quoted.
+    """
+    # Check if query involves PO_DETAILS table
+    if not re.search(r'\bPO_DETAILS\b', query, re.IGNORECASE):
+        return query
+
+    # Pattern to find unquoted item_# and discount_%
+    # Negative lookbehind to ensure not already quoted
+    patterns = [
+        (r'(?<!")(\bitem_#\b)(?!")', r'"\1"'),
+        (r'(?<!")(\bdiscount_%\b)(?!")', r'"\1"')
+    ]
+
+    fixed_query = query
+    for pattern, replacement in patterns:
+        fixed_query = re.sub(pattern, replacement, fixed_query, flags=re.IGNORECASE)
+
+    return fixed_query
+
+
+def add_qualify_for_distinct_purchase_order(query: str) -> str:
+    """
+    Add QUALIFY ROW_NUMBER() clause when DISTINCT PURCHASE_ORDER is used
+    to get only the latest entry for each PO.
+    """
+    # Check if query has DISTINCT and PURCHASE_ORDER
+    if not (re.search(r'\bDISTINCT\b', query, re.IGNORECASE) and
+            re.search(r'\bPURCHASE_ORDER\b', query, re.IGNORECASE)):
+        return query
+
+    # Check if QUALIFY already exists
+    if re.search(r'\bQUALIFY\b', query, re.IGNORECASE):
+        return query
+
+    # Check if it's a SELECT DISTINCT query with PURCHASE_ORDER
+    select_pattern = r'SELECT\s+DISTINCT\s+.*?\bPURCHASE_ORDER\b'
+    if not re.search(select_pattern, query, re.IGNORECASE | re.DOTALL):
+        return query
+
+    # Find where to insert QUALIFY (just before the semicolon or at the end)
+    # Remove trailing semicolon if exists
+    query = query.rstrip()
+    if query.endswith(';'):
+        query = query[:-1]
+
+    # Add QUALIFY clause
+    qualify_clause = "\nQUALIFY ROW_NUMBER() OVER (PARTITION BY PURCHASE_ORDER ORDER BY PO_ENTRY_DATE DESC) = 1"
+
+    # Add the clause and semicolon
+    fixed_query = query + qualify_clause + ';'
+
+    return fixed_query
+
 def auto_fix_sql_query(query: str, schema_text: str) -> Tuple[str, List[str]]:
     """
     Main function to automatically fix common SQL query issues.
@@ -214,6 +269,16 @@ def auto_fix_sql_query(query: str, schema_text: str) -> Tuple[str, List[str]]:
     if query_after_null_fix != query:
         fixes_applied.append("Added IS NOT NULL conditions for grouped columns to exclude NULL results")
         query = query_after_null_fix
+    # Fix 4: Add quotes to special columns in PO_DETAILS
+    query_after_quote_fix = fix_special_column_quotes(query)
+    if query_after_quote_fix != query:
+        fixes_applied.append("Added quotes to special columns (item_#, discount_%) in PO_DETAILS")
+        query = query_after_quote_fix
+    # Fix 5: Add QUALIFY for DISTINCT PURCHASE_ORDER queries
+    query_after_qualify_fix = add_qualify_for_distinct_purchase_order(query)
+    if query_after_qualify_fix != query:
+        fixes_applied.append("Added QUALIFY ROW_NUMBER() to get latest entry per Purchase Order")
+        query = query_after_qualify_fix
 
     return query, fixes_applied
 

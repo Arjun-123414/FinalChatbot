@@ -116,7 +116,7 @@ def detect_continuation_question(
     2. Question 2 should be asking for additional details or filtering of Question 1's context
     3. Question 2 might use pronouns (it, that, which) or be incomplete without Question 1's context
     4. Question 2 might be asking for a subset, maximum, minimum, or specific detail from Question 1's scope
-
+    5. 🚫 IMPORTANT: Never merge intents. The combined_question must ONLY rewrite Question 2 by inheriting context (filters, vendor, year, etc.) from Question 1. Do not repeat or include Q1's intent.
     Respond in JSON format:
     {{
         "is_continuation": true/false,

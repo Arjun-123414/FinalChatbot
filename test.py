@@ -636,16 +636,31 @@ def load_conversation_into_session(conversation):
     st.session_state.last_save_time = time.time()
 
 
-def get_limited_conversation_history(messages, window_size=2):
+def get_limited_conversation_history(messages, window_size=2, preserve_correction_context=False):
     """
     Get only the most recent conversation window for LLM context.
     window_size=2 means we keep only the last Q&A pair (1 user message + 1 assistant message)
+    preserve_correction_context=True will look back further if we're in a correction flow
     """
     if not messages:
         return []
 
     # Filter out system messages as we'll add that separately
     non_system_messages = [msg for msg in messages if msg["role"] != "system"]
+
+    # Check if we're in a correction/clarification flow
+    if preserve_correction_context and len(non_system_messages) >= 2:
+        # Check if the last assistant message is a spelling suggestion
+        last_assistant_msg = None
+        for msg in reversed(non_system_messages):
+            if msg["role"] == "assistant":
+                last_assistant_msg = msg
+                break
+
+        if last_assistant_msg and last_assistant_msg["content"] == "spelling_suggestions":
+            # We're in a spelling correction flow - include more context
+            # Look for the original question that led to this correction
+            window_size = 4  # Include 2 Q&A pairs to maintain context
 
     # Return only the last 'window_size' messages
     return non_system_messages[-window_size:] if len(non_system_messages) > window_size else non_system_messages
@@ -2136,7 +2151,13 @@ def main_app():
                 enhanced_messages = [{"role": "system", "content": enhanced_prompt}] + st.session_state.messages[1:]
 
                 # Use limited context for SQL generation
-                limited_messages = get_limited_conversation_history(enhanced_messages[1:], window_size=2)
+                # Check if we're in a correction flow
+                in_correction_flow = st.session_state.get("spelling_just_corrected", False)
+                limited_messages = get_limited_conversation_history(
+                    enhanced_messages[1:],
+                    window_size=2,
+                    preserve_correction_context=in_correction_flow
+                )
                 enhanced_messages_limited = [{"role": "system", "content": enhanced_prompt}] + limited_messages
                 response_text, token_usage_first_call = get_groq_response(enhanced_messages_limited)
 
@@ -2144,7 +2165,13 @@ def main_app():
                 del st.session_state.temp_clarifications
             else:
                 # Use limited context for SQL generation
-                limited_messages = get_limited_conversation_history(st.session_state.messages, window_size=2)
+                # Check if we're in a correction flow
+                in_correction_flow = st.session_state.get("spelling_just_corrected", False)
+                limited_messages = get_limited_conversation_history(
+                    st.session_state.messages,
+                    window_size=2,
+                    preserve_correction_context=in_correction_flow
+                )
                 response_text, token_usage_first_call = get_groq_response_with_system(limited_messages)
 
             st.session_state.total_tokens += token_usage_first_call
@@ -2576,6 +2603,7 @@ def main_app():
                     # SET FLAG to indicate spelling was just corrected
                     # SET FLAG to indicate spelling was just corrected
                     st.session_state.spelling_just_corrected = True
+                    st.session_state.preserve_correction_context = True
 
                     # If we have pending clarifications, update them with correct spelling
                     if hasattr(st.session_state, 'pending_clarifications') and st.session_state.pending_clarifications:
@@ -2804,14 +2832,32 @@ def main_app():
                 enhanced_messages = [{"role": "system", "content": enhanced_prompt}] + st.session_state.messages[1:]
 
                 # Use limited context for SQL generation
-                limited_messages = get_limited_conversation_history(enhanced_messages[1:], window_size=2)
+                # Check if we're in a correction flow or just made a correction choice
+                in_correction_flow = (
+                        st.session_state.get("spelling_just_corrected", False) or
+                        st.session_state.get("awaiting_correction_choice", False)
+                )
+                limited_messages = get_limited_conversation_history(
+                    enhanced_messages[1:],
+                    window_size=2,
+                    preserve_correction_context=in_correction_flow
+                )
                 enhanced_messages_limited = [{"role": "system", "content": enhanced_prompt}] + limited_messages
                 response_text, token_usage_first_call = get_groq_response(enhanced_messages_limited)
 
                 # Don't delete temp_clarifications here - keep them for potential spelling correction
             else:
                 # Use limited context for SQL generation
-                limited_messages = get_limited_conversation_history(st.session_state.messages, window_size=2)
+                # Check if we're in a correction flow or just made a correction choice
+                in_correction_flow = (
+                        st.session_state.get("spelling_just_corrected", False) or
+                        st.session_state.get("awaiting_correction_choice", False)
+                )
+                limited_messages = get_limited_conversation_history(
+                    st.session_state.messages,
+                    window_size=2,
+                    preserve_correction_context=in_correction_flow
+                )
                 response_text, token_usage_first_call = get_groq_response_with_system(limited_messages)
 
             st.session_state.total_tokens += token_usage_first_call

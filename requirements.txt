@@ -1,8 +1,8 @@
-snowflake-connector-python
+snowflake-connector-python==2.9.0
 grpcio==1.67.1
 python-dotenv
-sqlalchemy
-snowflake-sqlalchemy
+sqlalchemy==1.4.46
+snowflake-sqlalchemy==1.4.4
 pandas
 streamlit
 groq
@@ -11,5 +11,6 @@ sqlglot
 fuzzywuzzy
 pyarrow==18.1.0
 python-Levenshtein
+
 
 

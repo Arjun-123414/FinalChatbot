@@ -4,71 +4,26 @@ import json
 from typing import Dict, List, Tuple, Optional
 
 
-def extract_table_from_query(sql_query: str, groq_response_func=None) -> List[str]:
-    """Extract table names from SQL query using LLM."""
+def extract_table_from_query(sql_query: str) -> List[str]:
+    """Extract table names from SQL query."""
+    # Remove newlines and extra spaces
+    sql_query = ' '.join(sql_query.split())
 
-    if groq_response_func is None:
-        # Fallback to basic regex if LLM not available
-        return _extract_tables_regex_fallback(sql_query)
-
-    prompt = f"""
-    Extract ONLY the table names from this SQL query.
-    Return as a JSON array of table names, nothing else.
-
-    Rules:
-    - Extract only actual table names (from FROM, JOIN, INTO, UPDATE clauses)
-    - Ignore column names, function parameters, aliases
-    - Return empty array if no tables found
-
-    SQL Query:
-    {sql_query}
-
-    Example response format:
-    ["table1", "table2"]
-    """
-
-    messages = [
-        {"role": "system", "content": "You extract table names from SQL queries. Return only a JSON array."},
-        {"role": "user", "content": prompt}
-    ]
-
-    try:
-        response, _ = groq_response_func(messages)
-        cleaned = response.strip()
-
-        # Remove markdown if present
-        if cleaned.startswith("```json"):
-            cleaned = cleaned[7:]
-        elif cleaned.startswith("```"):
-            cleaned = cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-
-        tables = json.loads(cleaned.strip())
-        return tables if isinstance(tables, list) else []
-
-    except Exception as e:
-        # Fallback to regex if LLM fails
-        return _extract_tables_regex_fallback(sql_query)
-
-
-def _extract_tables_regex_fallback(sql_query: str) -> List[str]:
-    """Fallback regex method - removes content in parentheses first."""
-    # Remove content inside parentheses (handles functions)
-    cleaned = re.sub(r'\([^)]*\)', '', sql_query)
-
+    # Common patterns to find table names
     patterns = [
         r'FROM\s+(\w+)',
         r'JOIN\s+(\w+)',
         r'INTO\s+(\w+)',
         r'UPDATE\s+(\w+)',
+        r'TABLE\s+(\w+)'
     ]
 
     tables = []
     for pattern in patterns:
-        matches = re.findall(pattern, cleaned, re.IGNORECASE)
+        matches = re.findall(pattern, sql_query, re.IGNORECASE)
         tables.extend(matches)
 
+    # Remove duplicates and return
     return list(set(tables))
 
 
@@ -165,9 +120,8 @@ def detect_continuation_question(
     """
 
     # Extract tables from both queries
-    # In detect_continuation_question function
-    prev_tables = extract_table_from_query(previous_sql, groq_response_func)
-    curr_tables = extract_table_from_query(current_sql, groq_response_func)
+    prev_tables = extract_table_from_query(previous_sql)
+    curr_tables = extract_table_from_query(current_sql)
 
     # If they don't use the same table, it's not a continuation
     if not prev_tables or not curr_tables:

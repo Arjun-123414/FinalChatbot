@@ -9,22 +9,51 @@ def extract_table_from_query(sql_query: str) -> List[str]:
     # Remove newlines and extra spaces
     sql_query = ' '.join(sql_query.split())
 
-    # Common patterns to find table names
+    # STEP 1: Remove all content within parentheses (handles function calls)
+    # This removes EXTRACT(MONTH FROM date), COUNT(*), etc.
+    cleaned_query = remove_nested_parentheses(sql_query)
+
+    # STEP 2: Remove common SQL clauses that might cause confusion
+    # Remove subqueries and CTEs
+    cleaned_query = re.sub(r'WITH\s+\w+\s+AS\s*', '', cleaned_query, flags=re.IGNORECASE)
+
+    # STEP 3: Use robust patterns with word boundaries
     patterns = [
-        r'FROM\s+(\w+)',
-        r'JOIN\s+(\w+)',
-        r'INTO\s+(\w+)',
-        r'UPDATE\s+(\w+)',
-        r'TABLE\s+(\w+)'
+        r'\bFROM\s+(\w+)',  # FROM clause
+        r'\bJOIN\s+(\w+)',  # Any JOIN
+        r'\bINTO\s+(\w+)',  # INSERT INTO
+        r'\bUPDATE\s+(\w+)',  # UPDATE
+        r'\bTABLE\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(\w+)',  # CREATE/DROP TABLE
     ]
 
     tables = []
     for pattern in patterns:
-        matches = re.findall(pattern, sql_query, re.IGNORECASE)
+        matches = re.findall(pattern, cleaned_query, re.IGNORECASE)
         tables.extend(matches)
 
-    # Remove duplicates and return
+    # STEP 4: Filter out common SQL keywords that might be caught
+    sql_keywords = {
+        'SELECT', 'WHERE', 'GROUP', 'ORDER', 'HAVING', 'LIMIT',
+        'OFFSET', 'UNION', 'INTERSECT', 'EXCEPT', 'AS', 'ON',
+        'AND', 'OR', 'NOT', 'IN', 'EXISTS', 'CASE', 'WHEN', 'THEN',
+        'ELSE', 'END', 'DISTINCT', 'ALL', 'ANY', 'SOME'
+    }
+
+    # Remove duplicates and keywords, return
+    tables = [t for t in tables if t.upper() not in sql_keywords]
     return list(set(tables))
+
+
+def remove_nested_parentheses(text: str) -> str:
+    """
+    Remove all content within parentheses, handling nested cases.
+    This is the key to handling function calls reliably.
+    """
+    # Iteratively remove innermost parentheses until none remain
+    while '(' in text:
+        # Match innermost parentheses (non-nested)
+        text = re.sub(r'\([^()]*\)', '', text)
+    return text
 
 
 def is_sql_query(text: str) -> bool:

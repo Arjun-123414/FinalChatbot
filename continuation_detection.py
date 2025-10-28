@@ -8,6 +8,8 @@ def extract_table_from_query(sql_query: str) -> List[str]:
     """Extract table names from SQL query."""
     # Remove newlines and extra spaces
     sql_query = ' '.join(sql_query.split())
+    sql_query = re.sub(r'EXTRACT\s*\([^)]+\)', '', sql_query, flags=re.IGNORECASE)
+    sql_query = re.sub(r'SUBSTRING\s*\([^)]+\)', '', sql_query, flags=re.IGNORECASE)
 
     # Common patterns to find table names
     patterns = [
@@ -373,3 +375,4 @@ def check_and_handle_continuation(
     )
 
     return result
+

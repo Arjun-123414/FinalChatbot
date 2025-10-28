@@ -4,27 +4,71 @@ import json
 from typing import Dict, List, Tuple, Optional
 
 
-def extract_table_from_query(sql_query: str) -> List[str]:
-    """Extract table names from SQL query."""
-    # Remove newlines and extra spaces
-    sql_query = ' '.join(sql_query.split())
-    
+def extract_table_from_query(sql_query: str, groq_response_func=None) -> List[str]:
+    """Extract table names from SQL query using LLM."""
 
-    # Common patterns to find table names
+    if groq_response_func is None:
+        # Fallback to basic regex if LLM not available
+        return _extract_tables_regex_fallback(sql_query)
+
+    prompt = f"""
+    Extract ONLY the table names from this SQL query.
+    Return as a JSON array of table names, nothing else.
+
+    Rules:
+    - Extract only actual table names (from FROM, JOIN, INTO, UPDATE clauses)
+    - Ignore column names, function parameters, aliases
+    - Return empty array if no tables found
+
+    SQL Query:
+    {sql_query}
+
+    Example response format:
+    ["table1", "table2"]
+    """
+
+    messages = [
+        {"role": "system", "content": "You extract table names from SQL queries. Return only a JSON array."},
+        {"role": "user", "content": prompt}
+    ]
+
+    try:
+        response, _ = groq_response_func(messages)
+        cleaned = response.strip()
+
+        # Remove markdown if present
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:]
+        elif cleaned.startswith("```"):
+            cleaned = cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+
+        tables = json.loads(cleaned.strip())
+        return tables if isinstance(tables, list) else []
+
+    except Exception as e:
+        # Fallback to regex if LLM fails
+        return _extract_tables_regex_fallback(sql_query)
+
+
+def _extract_tables_regex_fallback(sql_query: str) -> List[str]:
+    """Fallback regex method - removes content in parentheses first."""
+    # Remove content inside parentheses (handles functions)
+    cleaned = re.sub(r'\([^)]*\)', '', sql_query)
+
     patterns = [
         r'FROM\s+(\w+)',
         r'JOIN\s+(\w+)',
         r'INTO\s+(\w+)',
         r'UPDATE\s+(\w+)',
-        r'TABLE\s+(\w+)'
     ]
 
     tables = []
     for pattern in patterns:
-        matches = re.findall(pattern, sql_query, re.IGNORECASE)
+        matches = re.findall(pattern, cleaned, re.IGNORECASE)
         tables.extend(matches)
 
-    # Remove duplicates and return
     return list(set(tables))
 
 
@@ -34,16 +78,16 @@ def is_sql_query(text: str) -> bool:
     Returns True if SQL keywords are detected.
     """
     sql_keywords = [
-        'SELECT', 'FROM', 'WHERE', 'JOIN', 'GROUP BY', 
+        'SELECT', 'FROM', 'WHERE', 'JOIN', 'GROUP BY',
         'ORDER BY', 'LIMIT', 'INSERT', 'UPDATE', 'DELETE',
         'COUNT(', 'SUM(', 'AVG(', 'MAX(', 'MIN('
     ]
-    
+
     text_upper = text.upper()
-    
+
     # Check if multiple SQL keywords are present
     keyword_count = sum(1 for keyword in sql_keywords if keyword in text_upper)
-    
+
     # If 2 or more SQL keywords found, it's likely SQL
     return keyword_count >= 2
 
@@ -88,19 +132,20 @@ def combine_questions_with_llm(current_question: str, previous_question: str, gr
     """
 
     messages = [
-        {"role": "system", "content": "You are an expert at rewriting questions with inherited context. You ONLY return natural language questions, never SQL code."},
+        {"role": "system",
+         "content": "You are an expert at rewriting questions with inherited context. You ONLY return natural language questions, never SQL code."},
         {"role": "user", "content": combination_prompt}
     ]
 
     try:
         response, _ = groq_response_func(messages)
         cleaned_response = response.strip().strip('"').strip("'")
-        
+
         # Validate that the response is not SQL
         if is_sql_query(cleaned_response):
             # Fallback to simple concatenation if LLM returns SQL
             return f"{current_question} (in context of: {previous_question})"
-        
+
         return cleaned_response
     except Exception:
         return f"{current_question} (in context of: {previous_question})"
@@ -120,8 +165,9 @@ def detect_continuation_question(
     """
 
     # Extract tables from both queries
-    prev_tables = extract_table_from_query(previous_sql)
-    curr_tables = extract_table_from_query(current_sql)
+    # In detect_continuation_question function
+    prev_tables = extract_table_from_query(previous_sql, groq_response_func)
+    curr_tables = extract_table_from_query(current_sql, groq_response_func)
 
     # If they don't use the same table, it's not a continuation
     if not prev_tables or not curr_tables:
@@ -168,7 +214,8 @@ def detect_continuation_question(
     """
 
     messages = [
-        {"role": "system", "content": "You are an expert at analyzing questions. When providing a combined_question, you ALWAYS use natural language, NEVER SQL code."},
+        {"role": "system",
+         "content": "You are an expert at analyzing questions. When providing a combined_question, you ALWAYS use natural language, NEVER SQL code."},
         {"role": "user", "content": analysis_prompt}
     ]
 
@@ -188,18 +235,18 @@ def detect_continuation_question(
 
         if result.get('is_continuation') and result.get('confidence') in ['high', 'medium']:
             combined_question = result.get('combined_question')
-            
+
             # CRITICAL VALIDATION: Check if the combined_question is SQL
             if combined_question and is_sql_query(combined_question):
                 # LLM returned SQL - use the dedicated combine function instead
                 combined_question = combine_questions_with_llm(
-                    current_question, 
-                    previous_question, 
+                    current_question,
+                    previous_question,
                     groq_response_func
                 )
-            
+
             return True, combined_question, result.get('reasoning')
-            
+
     except Exception as e:
         # Fallback to simple heuristic if LLM fails
         continuation_keywords = ['which', 'what', 'that', 'those', 'maximum', 'minimum', 'most', 'least', 'highest',
@@ -309,7 +356,7 @@ def handle_continuation_detection(
         if is_sql_query(combined_question):
             # Last resort - use simple concatenation
             combined_question = f"{current_question} (continuing from: {previous_user_question})"
-        
+
         formatted_response = format_continuation_options(
             current_question,
             combined_question,
@@ -374,5 +421,3 @@ def check_and_handle_continuation(
     )
 
     return result
-
-

@@ -2178,7 +2178,7 @@ def main_app():
 
             # Check if it's an error response
             if response_text.strip().startswith("ERROR:"):
-                raise Exception(response_text.strip())
+                raise Exception("I apologize, but I'm unable to answer that question. Please ask a question related to your business data, such as vendor details, purchase orders, invoices, or purchase requisitions.")
 
             sql_query = response_text.strip()
 
@@ -2864,7 +2864,7 @@ def main_app():
 
             # Check if it's an error response
             if response_text.strip().startswith("ERROR:"):
-                raise Exception(response_text.strip())
+                raise Exception("I apologize, but I'm unable to answer that question. Please ask a question related to your business data, such as vendor details, purchase orders, invoices, or purchase requisitions.")
 
             # Clean the SQL query - remove markdown code blocks
             sql_query = response_text.strip()
@@ -3354,4 +3354,5 @@ if st.session_state["authenticated"]:
         main_app()
 else:
     login_page()
+
 

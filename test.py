@@ -2500,7 +2500,7 @@ def main_app():
             if 'final_message_placeholder' in locals():
                 final_message_placeholder.empty()
 
-            natural_response = f"Error during retry: {str(e)}"
+            natural_response = "I apologize, but I'm unable to answer that question. Please ask a question related to your business data, such as vendor details, purchase orders, invoices, or purchase requisitions."
             save_query_result(
                 prompt,
                 None,
@@ -3323,7 +3323,7 @@ def main_app():
             if 'final_message_placeholder' in locals():
                 final_message_placeholder.empty()
 
-            natural_response = f"Error: {str(e)}"
+            natural_response = "I apologize, but I'm unable to answer that question. Please ask a question related to your business data, such as vendor details, purchase orders, invoices, or purchase requisitions."
             save_query_result(
                 prompt,
                 None,
@@ -3354,3 +3354,4 @@ if st.session_state["authenticated"]:
         main_app()
 else:
     login_page()
+

@@ -1509,11 +1509,6 @@ def main_app():
             else:
                 st.error("Failed to clear chat history.")
         # Add this in sidebar after the Learning Stats button
-        if "knowledge_base_instructions" in st.session_state and st.session_state.knowledge_base_instructions:
-            with st.expander("📚 Knowledge Base"):
-                st.markdown("*Shared instructions from all users:*")
-                for i, instruction in enumerate(st.session_state.knowledge_base_instructions, 1):
-                    st.markdown(f"{i}. {instruction}")
         # 4. Logout button
         if st.button("Logout"):
             # Clear all session state variables related to chat and queries
@@ -1522,6 +1517,12 @@ def main_app():
             # Reinitialize only the authentication state
             st.session_state["authenticated"] = False
             st.rerun()
+        
+        if "knowledge_base_instructions" in st.session_state and st.session_state.knowledge_base_instructions:
+            with st.expander("📚 Knowledge Base"):
+                st.markdown("*Shared instructions from all users:*")
+                for i, instruction in enumerate(st.session_state.knowledge_base_instructions, 1):
+                    st.markdown(f"{i}. {instruction}")
 
     # ----------------------------------
     #  B) MAIN: Chat interface
@@ -3354,5 +3355,6 @@ if st.session_state["authenticated"]:
         main_app()
 else:
     login_page()
+
 
 

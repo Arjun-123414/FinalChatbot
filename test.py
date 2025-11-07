@@ -1508,7 +1508,8 @@ def main_app():
                 st.rerun()
             else:
                 st.error("Failed to clear chat history.")
-        # Add this in sidebar after the Learning Stats button
+
+
         # 4. Logout button
         if st.button("Logout"):
             # Clear all session state variables related to chat and queries
@@ -1517,7 +1518,7 @@ def main_app():
             # Reinitialize only the authentication state
             st.session_state["authenticated"] = False
             st.rerun()
-        
+
         if "knowledge_base_instructions" in st.session_state and st.session_state.knowledge_base_instructions:
             with st.expander("📚 Knowledge Base"):
                 st.markdown("*Shared instructions from all users:*")
@@ -2179,7 +2180,7 @@ def main_app():
 
             # Check if it's an error response
             if response_text.strip().startswith("ERROR:"):
-                raise Exception("I apologize, but I'm unable to answer that question. Please ask a question related to your business data, such as vendor details, purchase orders, invoices, or purchase requisitions.")
+                raise Exception(response_text.strip())
 
             sql_query = response_text.strip()
 
@@ -2204,6 +2205,41 @@ def main_app():
 
             # Execute the query directly
             result = query_snowflake(sql_query, st.session_state["user"])
+
+            if isinstance(result, dict) and "error" in result:
+                error_msg = result["error"].lower()
+                if "sql compilation error" in error_msg or "invalid identifier" in error_msg or "syntax error" in error_msg:
+                    # Clear progress animations
+                    with progress_container:
+                        if 'status_text' in locals():
+                            status_text.empty()
+                        progress_container.empty()
+
+                    if 'final_message_placeholder' in locals():
+                        final_message_placeholder.empty()
+
+                    natural_response = "I apologize, but I couldn't process that query correctly. The database column I tried to use doesn't exist or has a different name. Please try rephrasing your question."
+
+                    st.session_state.messages.append({"role": "assistant", "content": natural_response})
+                    st.session_state.chat_history.append({"role": "assistant", "content": natural_response})
+
+                    with st.chat_message("assistant"):
+                        st.markdown(natural_response)
+
+                    save_query_result(
+                        prompt,
+                        natural_response,
+                        None,
+                        sql_query,
+                        response_text,
+                        tokens_first_call=token_usage_first_call,
+                        tokens_second_call=0,
+                        total_tokens_used=st.session_state.total_tokens,
+                        error_message=str(result["error"])
+                    )
+
+                    save_after_exchange()
+                    st.rerun()
 
             def get_snowflake_connectionz():
                 return create_engine(URL(
@@ -2501,7 +2537,7 @@ def main_app():
             if 'final_message_placeholder' in locals():
                 final_message_placeholder.empty()
 
-            natural_response = "I apologize, but I'm unable to answer that question. Please ask a question related to your business data, such as vendor details, purchase orders, invoices, or purchase requisitions."
+            natural_response = f"Error during retry: {str(e)}"
             save_query_result(
                 prompt,
                 None,
@@ -2865,7 +2901,7 @@ def main_app():
 
             # Check if it's an error response
             if response_text.strip().startswith("ERROR:"):
-                raise Exception("I apologize, but I'm unable to answer that question. Please ask a question related to your business data, such as vendor details, purchase orders, invoices, or purchase requisitions.")
+                raise Exception(response_text.strip())
 
             # Clean the SQL query - remove markdown code blocks
             sql_query = response_text.strip()
@@ -2893,6 +2929,42 @@ def main_app():
 
             # Execute the query directly
             result = query_snowflake(sql_query, st.session_state["user"])
+
+            if isinstance(result, dict) and "error" in result:
+                error_msg = result["error"].lower()
+                if "sql compilation error" in error_msg or "invalid identifier" in error_msg or "syntax error" in error_msg:
+                    # Clear progress animations
+                    with progress_container:
+                        if 'status_text' in locals():
+                            status_text.empty()
+                        progress_container.empty()
+
+                    if 'final_message_placeholder' in locals():
+                        final_message_placeholder.empty()
+
+                    natural_response = "I apologize, but I couldn't process that query correctly. The database column I tried to use doesn't exist or has a different name. Please try rephrasing your question."
+
+                    st.session_state.messages.append({"role": "assistant", "content": natural_response})
+                    st.session_state.chat_history.append({"role": "assistant", "content": natural_response})
+
+                    with st.chat_message("assistant"):
+                        st.markdown(natural_response)
+
+                    save_query_result(
+                        prompt,
+                        natural_response,
+                        None,
+                        sql_query,
+                        response_text,
+                        tokens_first_call=token_usage_first_call,
+                        tokens_second_call=0,
+                        total_tokens_used=st.session_state.total_tokens,
+                        error_message=str(result["error"])
+                    )
+
+                    save_after_exchange()
+                    st.rerun()
+
             if isinstance(result, dict) and "error" in result and "Access Denied" in result["error"]:
                 # This is an access control error - DO NOT trigger clarification
                 natural_response = result["error"]
@@ -3355,6 +3427,3 @@ if st.session_state["authenticated"]:
         main_app()
 else:
     login_page()
-
-
-
